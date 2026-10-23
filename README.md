@@ -2,7 +2,10 @@
 
 A Claude Code mod for Claude Desktop that keeps the Code sidebar down to what you are working on.
 
-![Before and after](docs/images/hero.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
+  <img alt="Before: every folder ever opened, in one long list. After: only current projects, busiest on top." src="docs/images/hero.png">
+</picture>
 
 - **One section per project.** Sessions are filed by folder (the git repo root, so subfolders and worktrees land
   together); sessions with no folder go to «💬 No folder», sessions in your home folder to «🏠 Home».

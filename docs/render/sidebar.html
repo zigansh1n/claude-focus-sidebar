@@ -17,6 +17,19 @@
     --sel: #e7e3dc;
     --dot: #3b82f6;
   }
+  body.dark {
+    --bg: #1b1a18;
+    --win: #232220;
+    --side: #262523;
+    --line: #3a3835;
+    --text: #ecebe7;
+    --muted: #a19c92;
+    --faint: #6f6b64;
+    --sel: #36342f;
+  }
+  body.dark .win { box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3); }
+  body.dark .dense .row { color: #b9b5ad; }
+  body.dark .pill, body.dark .sub2 code { background: #2f2d2a; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
@@ -123,6 +136,7 @@
     sessions += n
   }
   document.getElementById('before-count').textContent = `${projects} folders · ${sessions} sessions · keeps scrolling`
+  if (new URLSearchParams(location.search).get('theme') === 'dark') document.body.classList.add('dark')
   const only = new URLSearchParams(location.search).get('only')
   if (only) {
     document.body.classList.add('single')
