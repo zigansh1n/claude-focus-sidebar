@@ -1,0 +1,7 @@
+{
+  "name": "focus-sidebar",
+  "owner": { "name": "zigansh1n" },
+  "plugins": [
+    { "name": "focus-sidebar", "source": "./", "description": "Claude Desktop sidebar that shows only what you work on: busiest projects on top, idle folders hidden" }
+  ]
+}

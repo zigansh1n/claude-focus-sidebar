@@ -1,0 +1,1 @@
+{ "name": "focus-sidebar", "version": "0.5.0", "description": "Claude Desktop sidebar that shows only what you work on: one section per project, busiest on top, folders idle a day or more hidden", "author": { "name": "zigansh1n" }, "license": "MIT", "repository": "https://github.com/zigansh1n/claude-focus-sidebar" }
