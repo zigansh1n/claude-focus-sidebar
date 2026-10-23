@@ -1,6 +1,8 @@
-# Focus Sidebar
+# Focus Sidebar — a tidy Claude Desktop sidebar for Claude Code
 
-A Claude Code mod for Claude Desktop that keeps the Code sidebar down to what you are working on.
+**Too many Claude Code sessions and projects in the Claude Desktop sidebar?** Focus Sidebar is a Claude Code mod
+(a hooks plugin) that organizes the Code sidebar by project, keeps the project you are working on right now at the
+top, and hides folders you have not touched for a working day. It runs on its own, with no clicks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
@@ -43,6 +45,26 @@ In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add 
 
 The mod starts working in the next Claude Desktop session you open or resume. It needs a Claude Code build with
 hooks modules (mods); if nothing happens, see `claude --debug` for a `hooks module focus-sidebar ... loaded` line.
+
+## FAQ
+
+**How do I organize Claude Code sessions by project in Claude Desktop?**
+Install Focus Sidebar. Every session is filed into a sidebar section named after its project folder (the git repo
+root), and new sessions are filed the same way a few seconds after they start.
+
+**How do I hide old Claude Code sessions in the sidebar?**
+Folders you skip for a full working day are hidden automatically: their sessions move to the app's Archived list.
+Nothing is deleted, and a folder comes back as soon as you work in it again or run `/show-folder <name>`.
+
+**Will a weekend hide all my projects?**
+No. Only days you actually worked count, so after days off the sidebar looks the way you left it.
+
+**Does it work with the Claude Code terminal (CLI)?**
+It arranges Claude Desktop's sidebar, so you need Claude Desktop. Terminal sessions on the same Mac load the mod
+too and can trigger a re-sort while Claude Desktop is running.
+
+**How do I uninstall it?**
+`claude plugin uninstall focus-sidebar`. Hidden sessions stay in the Archived list, where you can restore them.
 
 ## How it works
 

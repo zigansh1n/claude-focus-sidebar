@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280, initial-scale=1">
+<title>Focus Sidebar</title>
+<style>
+  :root { --bg: #1b1a18; --side: #262523; --line: #3a3835; --text: #ecebe7; --muted: #a19c92; --faint: #6f6b64; --sel: #36342f; --accent: #e8794f; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1280px; height: 640px; background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; display: flex; align-items: center; gap: 64px; padding: 0 80px; overflow: hidden; }
+  .copy { flex: 1; }
+  .kicker { font-size: 18px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 76px; line-height: 1.02; letter-spacing: -.02em; margin: 14px 0 22px; }
+  p { font-size: 27px; color: var(--muted); max-width: 560px; }
+  p b { color: var(--text); font-weight: 600; }
+  .repo { margin-top: 34px; font: 20px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--faint); }
+  .win { width: 400px; background: var(--side); border: 1px solid var(--line); border-radius: 16px; padding: 18px 12px 22px; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .dots { display: flex; gap: 8px; padding: 0 8px 14px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1) { background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+  h4 { font-size: 16px; padding: 10px 10px 4px; }
+  .r { font-size: 15.5px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r small { color: var(--faint); font-size: 13.5px; }
+  .r.sel { background: var(--sel); }
+  .gone { margin: 14px 10px 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="copy">
+    <div class="kicker">Claude Code mod</div>
+    <h1>Focus Sidebar</h1>
+    <p>Your Claude Desktop sidebar shows <b>only what you work on</b>: current project on top, idle folders out of sight.</p>
+    <div class="repo">github.com/zigansh1n/claude-focus-sidebar</div>
+  </div>
+  <div class="win">
+    <div class="dots"><i></i><i></i><i></i></div>
+    <h4>🔥 Project 7</h4>
+    <div class="r sel">Fix checkout flow <small>· Oct 23, 10:13</small></div>
+    <div class="r">Add retry to webhook <small>· Oct 23, 09:40</small></div>
+    <h4>🔥 Project 2</h4>
+    <div class="r">Migrate auth to tokens <small>· Oct 23, 09:31</small></div>
+    <h4>💬 No folder</h4>
+    <div class="r">Compare two libraries <small>· Oct 23, 09:02</small></div>
+  </div>
+</body>
+</html>
