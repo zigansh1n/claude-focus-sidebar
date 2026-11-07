@@ -17,7 +17,7 @@ const HALF_LIFE_DAYS = 3
 const FIRST_RUN_MS = 5_000
 const AFTER_TURN_MS = 2_000
 const PERIOD_MS = 5 * 60_000
-export const VERSION = '0.6.8'
+export const VERSION = '0.6.9'
 // Every open session runs this mod, each the version it started with; the lock keeps them from syncing
 // at once. It is released when a sync ends and only outlives one that crashed mid-way. A busy sync
 // (a re-rank with titles to stamp) once ran past 45 s, a second one started, and a section was lost.
@@ -217,13 +217,14 @@ let logFile: string | null = null
 const me = Math.random().toString(36).slice(2)
 // Which copy wrote a line, and what woke it: every open session runs its own copy.
 const tag = (why: string) => `[${me.slice(0, 5)} ${why}]`
-// The last line this copy wrote: the same outcome of the same kind of wake-up is written once, not every tick.
+// The last outcome this copy wrote: the same outcome is written once, whatever woke the copy, so wake-ups
+// of several kinds in a row (a prompt, a turn, the 5 s start) do not repeat it.
 let lastNote = ''
 
 const note = async ($: EngineInterface, why: string, line: string) => {
+  if (!logFile || line === lastNote) return
+  lastNote = line
   const text = `${tag(why)} ${line}`
-  if (!logFile || text === lastNote) return
-  lastNote = text
   try {
     const prev = (await $.fs.exists(logFile)) ? await $.fs.read(logFile) : ''
     await $.fs.write(logFile, (prev + `${new Date().toISOString()} ${text}\n`).slice(-20000))

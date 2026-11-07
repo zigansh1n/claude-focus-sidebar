@@ -308,11 +308,11 @@ test('the log says which copy synced, why, and how it ended; a repeat of the sam
   const lines = clock.log()
   expect(lines[0]).toMatch(new RegExp(`^\\S+ \\[\\w+ start\\] loaded ${VERSION.replace(/\./g, '\\.')}, desktop, /Users/u/web-app$`))
   const orders = lines.filter(l => l.includes('order:'))
-  // One for the sync 5 s after the start, one for the first tick; the second tick repeats it.
+  // The first sync filed sessions (moved 2); the first tick found nothing to do; the second tick repeats it.
   expect(orders.map(l => l.match(/\[\w{5} (\w+)\]/)![1])).toEqual(['first', 'tick'])
 })
 
-test('a refused listing is logged each time it differs, with the reason, and not over and over', async ($, on) => {
+test('a refused listing is logged with the reason once, however many wake-ups of any kind meet it', async ($, on) => {
   const app = fakeApp([s('self', '/Users/u/web-app', 0), s('k2', '/Users/u/web-app', 0.1)])
   app.quirks.listRefused = true
   const clock = await start($, on, app)
@@ -320,7 +320,7 @@ test('a refused listing is logged each time it differs, with the reason, and not
   await clock.advance(PERIOD_MS)
 
   const refused = clock.log().filter(l => l.includes('Session state unavailable'))
-  expect(refused.map(l => l.match(/\[\w{5} (\w+)\]/)![1])).toEqual(['first', 'tick'])
+  expect(refused.map(l => l.match(/\[\w{5} (\w+)\]/)![1])).toEqual(['first'])
   expect(app.groupOf('k2')).toBe(null)
 })
 
