@@ -21,7 +21,7 @@ const fakeApp = (sessions: Session[], userSections: Section[] = []) => {
   // Sections the mod asked the session list about, one by one.
   const listed: string[] = []
   // Ways the real app could part from what the mod assumes.
-  const quirks = { renameIgnored: false, listCap: 0 }
+  const quirks = { renameIgnored: false, listCap: 0, listRefused: false }
   // Sessions shown under a section named after another project, after each call.
   const misfiled: string[] = []
   const filed = new Set<string>()
@@ -39,6 +39,7 @@ const fakeApp = (sessions: Session[], userSections: Section[] = []) => {
   const reply = (tool: string, args: Record<string, unknown>): string => {
     calls.push(tool)
     if (tool === 'list_sessions') {
+      if (quirks.listRefused) throw new Error('refused: PreToolUse hook error: Session state unavailable; cannot verify tool permissions.')
       if (args.include_archived) throw new Error('result exceeds maximum allowed tokens')
       if (args.group) listed.push(String(args.group))
       // Like the real tool: newest first, cut to `limit`, narrowed to one section by `group`.
@@ -134,8 +135,10 @@ const start = async ($: any, on: any, app: ReturnType<typeof fakeApp>, data: Rec
       return { value: { isError: true, content: [{ type: 'text', text: String(err) }] } }
     }
   })
-  on('fs.exists', (_: unknown, e: any) => ({ value: REPOS.has(e.path) }))
-  on('fs.write', () => ({ value: undefined }))
+  const files = new Map<string, string>()
+  on('fs.exists', (_: unknown, e: any) => ({ value: REPOS.has(e.path) || files.has(e.path) }))
+  on('fs.read', (_: unknown, e: any) => ({ value: files.get(e.path) ?? '' }))
+  on('fs.write', (_: unknown, e: any) => (files.set(e.path, e.text), { value: undefined }))
   on('session.start', (_: unknown, e: any) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: COMMAND } }))
   await $.session.start({ cwd: '/Users/u/web-app', surface: 'desktop', isInteractive: true })
@@ -145,7 +148,8 @@ const start = async ($: any, on: any, app: ReturnType<typeof fakeApp>, data: Rec
     await clock.advance(SETTLE_MS)
   }
   await advance(FIRST_RUN_MS)
-  return { advance, store }
+  const log = () => (files.get('/Users/u/.claude/focus-sidebar.log') ?? '').split('\n').filter(Boolean)
+  return { advance, store, log }
 }
 
 const s = (id: string, cwd: string, days: number, extra: Partial<Session> = {}): Session => ({
@@ -293,6 +297,37 @@ test('a listing too long even for one session stops the sync after a few tries, 
   expect(app.calls.filter(c => c === 'list_sessions').length).toBe(asked + 9)
   expect([app.manual(), app.groupOf('k2')]).toEqual(before)
   expect(app.groupOf('fresh')).toBe(null)
+})
+
+test('the log says which copy synced, why, and how it ended; a repeat of the same outcome is written once', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0), s('k2', '/Users/u/web-app', 0.1)])
+  const clock = await start($, on, app)
+  await clock.advance(PERIOD_MS)
+  await clock.advance(PERIOD_MS)
+
+  const lines = clock.log()
+  expect(lines[0]).toMatch(new RegExp(`^\\S+ \\[\\w+ start\\] loaded ${VERSION.replace(/\./g, '\\.')}, desktop, /Users/u/web-app$`))
+  const orders = lines.filter(l => l.includes('order:'))
+  // One for the sync 5 s after the start, one for the first tick; the second tick repeats it.
+  expect(orders.map(l => l.match(/\[\w{5} (\w+)\]/)![1])).toEqual(['first', 'tick'])
+})
+
+test('a refused listing is logged each time it differs, with the reason, and not over and over', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0), s('k2', '/Users/u/web-app', 0.1)])
+  app.quirks.listRefused = true
+  const clock = await start($, on, app)
+  await clock.advance(PERIOD_MS)
+  await clock.advance(PERIOD_MS)
+
+  const refused = clock.log().filter(l => l.includes('Session state unavailable'))
+  expect(refused.map(l => l.match(/\[\w{5} (\w+)\]/)![1])).toEqual(['first', 'tick'])
+  expect(app.groupOf('k2')).toBe(null)
+})
+
+test('a sync that stands aside says so in the log', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0)])
+  const clock = await start($, on, app, { version: '9.0.0' })
+  expect(clock.log().some(l => l.includes(' outdated'))).toBe(true)
 })
 
 test('slots no longer needed are removed', async ($, on) => {

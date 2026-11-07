@@ -17,7 +17,7 @@ const HALF_LIFE_DAYS = 3
 const FIRST_RUN_MS = 5_000
 const AFTER_TURN_MS = 2_000
 const PERIOD_MS = 5 * 60_000
-export const VERSION = '0.6.7'
+export const VERSION = '0.6.8'
 // Every open session runs this mod, each the version it started with; the lock keeps them from syncing
 // at once. It is released when a sync ends and only outlives one that crashed mid-way. A busy sync
 // (a re-rank with titles to stamp) once ran past 45 s, a second one started, and a section was lost.
@@ -215,6 +215,20 @@ export const restamp = (title: string, lastActivityAt: string, running = false) 
 
 let logFile: string | null = null
 const me = Math.random().toString(36).slice(2)
+// Which copy wrote a line, and what woke it: every open session runs its own copy.
+const tag = (why: string) => `[${me.slice(0, 5)} ${why}]`
+// The last line this copy wrote: the same outcome of the same kind of wake-up is written once, not every tick.
+let lastNote = ''
+
+const note = async ($: EngineInterface, why: string, line: string) => {
+  const text = `${tag(why)} ${line}`
+  if (!logFile || text === lastNote) return
+  lastNote = text
+  try {
+    const prev = (await $.fs.exists(logFile)) ? await $.fs.read(logFile) : ''
+    await $.fs.write(logFile, (prev + `${new Date().toISOString()} ${text}\n`).slice(-20000))
+  } catch {}
+}
 
 type Lock = { owner: string; until: number }
 type Paused = { version: string; until: number; reason: string }
@@ -250,17 +264,8 @@ async function listSessions(json: Json): Promise<Session[]> {
 }
 
 /** Brings the sidebar in line with the plan; resolves what it did, for the log. */
-export async function sync($: EngineInterface): Promise<string> {
-  const log = async (line: string) => {
-    if (!logFile) return
-    try {
-      // Background processes without the sidebar fail the same way every tick: keep one line per change.
-      if ((await $.store.get('lastLog')) === line) return
-      await $.store.set('lastLog', line)
-      const prev = (await $.fs.exists(logFile)) ? await $.fs.read(logFile) : ''
-      await $.fs.write(logFile, (prev + `${new Date().toISOString()} ${line}\n`).slice(-20000))
-    } catch {}
-  }
+async function syncOnce($: EngineInterface, why: string): Promise<string> {
+  const log = (line: string) => note($, why, line)
   const call = async (server: string, tool: string, args: Record<string, unknown>) => {
     const r = (await $.mcp.call(server, tool, args)) as Result
     if (r.isError) throw new Error(`${tool}: ${textOf(r)}`)
@@ -484,21 +489,25 @@ export async function sync($: EngineInterface): Promise<string> {
     } else if ((await $.store.get('strikes')) !== undefined) await $.store.delete('strikes')
 
     const line = `order: ${slots.map(s => s.name).join(' | ')}; renamed ${renamed}, moved ${moved}, removed ${extra.length}, hidden ${hidden}, stamped ${stamped}`
-    if (renamed || moved || extra.length || hidden || stamped) await log(line)
     return line
   } catch (err) {
-    const line = `skipped: ${String(err).slice(0, 300)}`
-    await log(line)
-    return line
+    return `skipped: ${String(err).slice(0, 300)}`
   } finally {
     if (((await $.store.get('lock')) as Lock | undefined)?.owner === me) await $.store.delete('lock')
   }
 }
 
+/** Syncs once and writes how it ended to the log, whatever the end: standing aside, a refusal, no change. */
+export async function sync($: EngineInterface, why = 'tick'): Promise<string> {
+  const line = await syncOnce($, why)
+  await note($, why, line)
+  return line
+}
+
 /** Syncs now, or as soon as another session's sync lets go of the lease. */
-const syncSoon = ($: EngineInterface, tries = RETRIES): void =>
-  void sync($).then(r => {
-    if (r === 'leased' && tries > 0) $.clock.after(RETRY_MS, () => syncSoon($, tries - 1))
+const syncSoon = ($: EngineInterface, why: string, tries = RETRIES): void =>
+  void sync($, why).then(r => {
+    if (r === 'leased' && tries > 0) $.clock.after(RETRY_MS, () => syncSoon($, why, tries - 1))
   })
 
 /** /show-folder: lists the hidden folders, or brings back the ones matching `query` for a day. */
@@ -544,21 +553,22 @@ export const register: Register = on => {
       description: 'Bring a hidden folder back to the sidebar (no name: list hidden folders)',
       argumentHint: '[folder]',
     })
-    $.clock.after(FIRST_RUN_MS, () => syncSoon($))
-    $.clock.every(PERIOD_MS, () => void sync($))
+    $.clock.after(FIRST_RUN_MS, () => syncSoon($, 'first'))
+    $.clock.every(PERIOD_MS, () => void sync($, 'tick'))
+    await note($, 'start', `loaded ${VERSION}, ${e.surface}, ${e.cwd}`)
     return started
   })
 
   // A prompt sent re-sorts at once, not when the turn ends.
   on('turn.start', async ($, e, next) => {
     const started = await next(e)
-    $.clock.after(AFTER_TURN_MS, () => syncSoon($))
+    $.clock.after(AFTER_TURN_MS, () => syncSoon($, 'prompt'))
     return started
   })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    $.clock.after(AFTER_TURN_MS, () => syncSoon($))
+    $.clock.after(AFTER_TURN_MS, () => syncSoon($, 'turn'))
     return done
   })
 
