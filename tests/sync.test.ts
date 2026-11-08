@@ -115,7 +115,7 @@ const PERIOD_MS = 5 * 60_000
 const SETTLE_MS = 300
 
 /** Starts a desktop session over the fake app with the mod loaded, and lets its first sync run. */
-const start = async ($: any, on: any, app: ReturnType<typeof fakeApp>, data: Record<string, unknown> = {}, rival = false) => {
+const start = async ($: any, on: any, app: ReturnType<typeof fakeApp>, data: Record<string, unknown> = {}, rival = false, seed: Record<string, string> = {}) => {
   const clock = mock.clock(on, { now: NOW })
   const store = new Map(Object.entries(data))
   const copy = (v: unknown) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)))
@@ -135,7 +135,7 @@ const start = async ($: any, on: any, app: ReturnType<typeof fakeApp>, data: Rec
       return { value: { isError: true, content: [{ type: 'text', text: String(err) }] } }
     }
   })
-  const files = new Map<string, string>()
+  const files = new Map<string, string>(Object.entries(seed))
   on('fs.exists', (_: unknown, e: any) => ({ value: REPOS.has(e.path) || files.has(e.path) }))
   on('fs.read', (_: unknown, e: any) => ({ value: files.get(e.path) ?? '' }))
   on('fs.write', (_: unknown, e: any) => (files.set(e.path, e.text), { value: undefined }))
@@ -149,7 +149,7 @@ const start = async ($: any, on: any, app: ReturnType<typeof fakeApp>, data: Rec
   }
   await advance(FIRST_RUN_MS)
   const log = () => (files.get('/Users/u/.claude/focus-sidebar.log') ?? '').split('\n').filter(Boolean)
-  return { advance, store, log }
+  return { advance, store, log, file: (p: string) => files.get(p) }
 }
 
 const s = (id: string, cwd: string, days: number, extra: Partial<Session> = {}): Session => ({
@@ -328,6 +328,20 @@ test('a sync that stands aside says so in the log', async ($, on) => {
   const app = fakeApp([s('self', '/Users/u/web-app', 0)])
   const clock = await start($, on, app, { version: '9.0.0' })
   expect(clock.log().some(l => l.includes(' outdated'))).toBe(true)
+})
+
+test('a copy installed from elsewhere stands aside for a newer one', async ($, on) => {
+  // Each install source has a store of its own: only the shared file tells copies apart.
+  const app = fakeApp([s('self', '/Users/u/web-app', 0), s('o', '/Users/u/api-server', 0)])
+  const clock = await start($, on, app, {}, false, { '/Users/u/.claude/focus-sidebar.version': '9.0.0' })
+  expect(clock.log().some(l => l.includes(' outdated'))).toBe(true)
+  expect(app.manual()).toEqual([])
+})
+
+test('a copy marks its version where copies from other installs see it', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0)])
+  const clock = await start($, on, app)
+  expect(clock.file('/Users/u/.claude/focus-sidebar.version')).toBe(VERSION)
 })
 
 test('slots no longer needed are removed', async ($, on) => {

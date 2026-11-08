@@ -17,7 +17,7 @@ const HALF_LIFE_DAYS = 3
 const FIRST_RUN_MS = 5_000
 const AFTER_TURN_MS = 2_000
 const PERIOD_MS = 5 * 60_000
-export const VERSION = '0.6.9'
+export const VERSION = '0.6.10'
 // Every open session runs this mod, each the version it started with; the lock keeps them from syncing
 // at once. It is released when a sync ends and only outlives one that crashed mid-way. A busy sync
 // (a re-rank with titles to stamp) once ran past 45 s, a second one started, and a section was lost.
@@ -214,6 +214,7 @@ export const restamp = (title: string, lastActivityAt: string, running = false) 
   `${running ? WORKING : WAITING} ${title.replace(MARK, '').replace(STAMP, '')} · ${stampOf(lastActivityAt)}`
 
 let logFile: string | null = null
+let markFile: string | null = null
 const me = Math.random().toString(36).slice(2)
 // Which copy wrote a line, and what woke it: every open session runs its own copy.
 const tag = (why: string) => `[${me.slice(0, 5)} ${why}]`
@@ -264,6 +265,20 @@ async function listSessions(json: Json): Promise<Session[]> {
   return [...new Map([found, ...parts.map(p => p.found)].flat().map(x => [x.sessionId, x])).values()]
 }
 
+/** Whether a newer copy already ran; if not, records this one's version for the others. */
+async function outdated($: EngineInterface): Promise<boolean> {
+  const version = String((await $.store.get('version')) ?? '0')
+  if (newer(version, VERSION)) return true
+  if (newer(VERSION, version)) await $.store.set('version', VERSION)
+  // The store belongs to one install source (a marketplace, a local folder): a copy installed from
+  // elsewhere never sees it. The file next to the log is seen by every copy.
+  if (!markFile) return false
+  const marked = (await $.fs.exists(markFile)) ? (await $.fs.read(markFile)).trim() : '0'
+  if (newer(marked, VERSION)) return true
+  if (newer(VERSION, marked)) await $.fs.write(markFile, VERSION)
+  return false
+}
+
 /** Brings the sidebar in line with the plan; resolves what it did, for the log. */
 async function syncOnce($: EngineInterface, why: string): Promise<string> {
   const log = (line: string) => note($, why, line)
@@ -282,9 +297,7 @@ async function syncOnce($: EngineInterface, why: string): Promise<string> {
   }
   const now = await $.clock.now()
   // A copy older than one that already ran stays out of the way of the newer rules.
-  const version = String((await $.store.get('version')) ?? '0')
-  if (newer(version, VERSION)) return 'outdated'
-  if (newer(VERSION, version)) await $.store.set('version', VERSION)
+  if (await outdated($)) return 'outdated'
   const paused = (await $.store.get('paused')) as Paused | undefined
   if (paused && paused.version === VERSION && paused.until > now) return 'paused'
 
@@ -549,6 +562,7 @@ export const register: Register = on => {
     const started = await next(e)
     const home = homeOf(e.cwd)
     logFile = home ? `${home}/.claude/focus-sidebar.log` : null
+    markFile = home ? `${home}/.claude/focus-sidebar.version` : null
     await $.command.register({
       name: COMMAND,
       description: 'Bring a hidden folder back to the sidebar (no name: list hidden folders)',
