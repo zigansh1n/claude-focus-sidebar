@@ -17,7 +17,7 @@ const HALF_LIFE_DAYS = 3
 const FIRST_RUN_MS = 5_000
 const AFTER_TURN_MS = 2_000
 const PERIOD_MS = 5 * 60_000
-export const VERSION = '0.6.10'
+export const VERSION = '0.6.11'
 // Every open session runs this mod, each the version it started with; the lock keeps them from syncing
 // at once. It is released when a sync ends and only outlives one that crashed mid-way. A busy sync
 // (a re-rank with titles to stamp) once ran past 45 s, a second one started, and a section was lost.
@@ -40,6 +40,8 @@ const LIST_LIMIT = 300
 // A folder worked in this recently gets 🔥 in its section name.
 const HOT_MS = 60 * 60_000
 const STICKY_MS = 2 * 60_000
+// How long a refusal to file or archive a session is remembered before the session is tried again.
+const REFUSED_MS = 6 * 60 * 60_000
 // Titles stamped per sync, so a first run over many sessions stays short.
 const STAMP_BATCH = 20
 
@@ -333,8 +335,19 @@ async function syncOnce($: EngineInterface, why: string): Promise<string> {
     const stray = [...new Set([...(((await $.store.get('parked')) as string[] | undefined) ?? []), ...made, ...marked])].filter(
       id => byId.has(id) && !owned.includes(id),
     )
-    // Routine runs look like any other session in the list, yet the sidebar refuses to file them.
-    const refused = new Set(((await $.store.get('refused')) as string[] | undefined) ?? [])
+    // Routine runs look like any other session in the list, yet the sidebar refuses to file them. A refusal
+    // is remembered for REFUSED_MS only: one the app gave in passing (a busy session, two copies racing)
+    // once left a folder's sessions out of the plan for good. Older stores kept a bare list: all retried.
+    const storedRefusals = (await $.store.get('refused')) as string[] | Record<string, number> | undefined
+    const refusedAt: Record<string, number> = Array.isArray(storedRefusals)
+      ? Object.fromEntries(storedRefusals.map(id => [id, 0]))
+      : { ...storedRefusals }
+    const refused = new Set(Object.keys(refusedAt).filter(id => refusedAt[id] + REFUSED_MS > now))
+    const refuse = async (id: string) => {
+      refusedAt[id] = now
+      refused.add(id)
+      await $.store.set('refused', Object.fromEntries([...refused].map(k => [k, refusedAt[k]])))
+    }
     const kept = new Set(((await $.store.get('kept')) as string[] | undefined) ?? [])
     const shownUntil = ((await $.store.get('shownUntil')) as Record<string, number> | undefined) ?? {}
     const shown = new Set(Object.keys(shownUntil).filter(f => shownUntil[f] > now))
@@ -344,7 +357,8 @@ async function syncOnce($: EngineInterface, why: string): Promise<string> {
       .slice(-WORK_DAYS_KEPT)
     await $.store.set('workDays', workDays)
     const { slots, hide } = plan(
-      rows.filter(s => !refused.has(s.sessionId)),
+      // A refused session already filed in a section still counts: without it its folder would lose its slot.
+      rows.filter(s => !refused.has(s.sessionId) || s.group),
       new Set([...owned, ...stray]),
       now,
       kept,
@@ -362,8 +376,7 @@ async function syncOnce($: EngineInterface, why: string): Promise<string> {
         // A routine's runs belong to the routine: leave its history as the app keeps it.
         const detail = (await json(SESSIONS, 'get_session', { session_id: id })) as { scheduledTaskId?: string }
         if (detail.scheduledTaskId) {
-          refused.add(id)
-          await $.store.set('refused', [...refused])
+          await refuse(id)
           continue
         }
         await call(SESSIONS, 'archive_session', { session_id: id, reason: `folder idle ${HIDE_AFTER_DAYS}+ day` })
@@ -417,10 +430,9 @@ async function syncOnce($: EngineInterface, why: string): Promise<string> {
               at.set(id, sectionId)
               moved++
             } catch {
-              refused.add(id)
+              await refuse(id)
             }
           }
-          await $.store.set('refused', [...refused])
         }
       }
     }
@@ -454,7 +466,7 @@ async function syncOnce($: EngineInterface, why: string): Promise<string> {
         byId.set(owned[i], { ...byId.get(owned[i])!, name: slots[i].name })
         renamed++
       }
-      await move(slots[i].sessionIds.filter(id => at.get(id) !== owned[i]), owned[i])
+      await move(slots[i].sessionIds.filter(id => at.get(id) !== owned[i] && !refused.has(id)), owned[i])
     }
     for (const id of [...stray, ...parked.values()]) if (!owned.includes(id)) await call(SIDEBAR, 'delete_section', { section_id: id })
     if (stray.length > 0 || parked.size > 0) await $.store.set('parked', [])

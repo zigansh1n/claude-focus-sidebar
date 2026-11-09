@@ -367,6 +367,37 @@ test('a routine run the sidebar refuses does not block the rest, and is not retr
   expect(app.calls.filter(c => c === 'move_sessions').length).toBe(moves)
 })
 
+test('a refusal an older store kept as a bare list is forgotten, and the session filed', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0), s('k1', '/Users/u/api-server', 0)])
+  await start($, on, app, { refused: ['k1'] })
+  expect(app.groupOf('k1')).toBe(`${HOT} api-server`)
+})
+
+test('a refusal is remembered for hours, then the session is tried again', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0), s('routine-1', '/Users/u/web-app', 0)])
+  const clock = await start($, on, app)
+  const moves = () => app.calls.filter(c => c === 'move_sessions').length
+  const first = moves()
+  await clock.advance(5 * 60 * 60_000)
+  expect(moves()).toBe(first)
+  await clock.advance(2 * 60 * 60_000)
+  expect(moves()).toBeGreaterThan(first)
+})
+
+test('refused sessions already filed in a section keep their folder its slot', async ($, on) => {
+  const app = fakeApp([s('self', '/Users/u/web-app', 0.01), s('a1', '/Users/u/api-server', 0.02), s('a2', '/Users/u/api-server', 0.03)])
+  const clock = await start($, on, app)
+  expect(app.groupOf('a1')).toBe(`${HOT} api-server`)
+  // The app refused both (say, busy at that moment): the folder must not drop out of the plan, or its
+  // section would be reused for another project with the sessions still inside.
+  clock.store.set('refused', { a1: NOW, a2: NOW })
+  await clock.advance(PERIOD_MS)
+  expect(app.manual()).toEqual([`${HOT} web-app`, `${HOT} api-server`])
+  expect(app.groupOf('a1')).toBe(`${HOT} api-server`)
+  expect(app.groupOf('a2')).toBe(`${HOT} api-server`)
+  expect(app.misfiled).toEqual([])
+})
+
 test('an idle folder the app will not archive goes to the archive slot', async ($, on) => {
   const app = fakeApp([s('self', '/Users/u/web-app', 0), s('yday', '/Users/u/web-app', 1), s('stuck-1', '/Users/u/old', 3), s('o2', '/Users/u/api-server', 3)])
   const clock = await start($, on, app)
