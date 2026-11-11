@@ -48,6 +48,8 @@ const fakeApp = (sessions: Session[], userSections: Section[] = []) => {
         .filter(s => !s.isArchived && (!args.group || s.group?.id === args.group))
         .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
         .slice(0, Number(args.limit ?? 20))
+      // Like the real tool: a section with no sessions is an error, not an empty list.
+      if (args.group && !live.length) throw new Error(`No other sessions found in group "${args.group}".`)
       if (quirks.listCap && live.length > quirks.listCap) throw new Error('result (51,035 characters across 1,288 lines) exceeds maximum allowed tokens')
       return JSON.stringify(live)
     }
@@ -263,6 +265,20 @@ test('a session list too long for one tool result still gets read: sections whol
   expect(app.isHidden('w0')).toBe(false)
   // Only sections of the user's own kind are asked about, once each.
   expect(app.listed.sort()).toEqual(['cg-1', 'cg-2'])
+})
+
+test('an empty section does not stop the sync when the session list is too long for one tool result', async ($, on) => {
+  const web = (n: number) => Array.from({ length: n }, (_, i) => s(`w${i}`, '/Users/u/web-app', 0.1 + i / 100))
+  const app = fakeApp([s('self', '/Users/u/web-app', 0), ...web(5)], [{ id: 'cg-own', kind: 'manual', name: 'Study' }])
+  const clock = await start($, on, app)
+
+  app.quirks.listCap = 4
+  app.sessions.push(s('fresh', '/Users/u/api-server', 0, { lastActivityAt: new Date(NOW + 60_000).toISOString() }))
+  await clock.advance(PERIOD_MS)
+
+  expect(app.listed).toContain('cg-own')
+  expect(app.groupOf('fresh')).toBe(`${HOT} api-server`)
+  expect(app.misfiled).toEqual([])
 })
 
 test('a folder idle for days is still hidden when the session list is too long for one tool result', async ($, on) => {

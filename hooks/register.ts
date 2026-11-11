@@ -17,7 +17,7 @@ const HALF_LIFE_DAYS = 3
 const FIRST_RUN_MS = 5_000
 const AFTER_TURN_MS = 2_000
 const PERIOD_MS = 5 * 60_000
-export const VERSION = '0.6.11'
+export const VERSION = '0.6.12'
 // Every open session runs this mod, each the version it started with; the lock keeps them from syncing
 // at once. It is released when a sync ends and only outlives one that crashed mid-way. A busy sync
 // (a re-rank with titles to stamp) once ran past 45 s, a second one started, and a section was lost.
@@ -252,6 +252,8 @@ async function listFitting(json: Json, args: Record<string, unknown>) {
     try {
       return { limit, found: (await json(SESSIONS, 'list_sessions', { ...args, limit })) as Session[] }
     } catch (err) {
+      // The app answers for a section with no sessions with an error, not an empty list.
+      if (/No other sessions found/.test(String(err))) return { limit, found: [] }
       if (!/exceeds maximum/.test(String(err)) || limit <= 1) throw err
     }
   }
